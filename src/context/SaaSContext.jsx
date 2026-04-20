@@ -3,9 +3,48 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 const SaaSContext = createContext();
 
 const INITIAL_PLANS = [
-  { id: 'pl_1', name: 'Basic', price: 50, limits: { outlets: 1, staff: 5 }, features: { ecommerce: false, pos: true, inventory: true } },
-  { id: 'pl_2', name: 'Pro', price: 299, limits: { outlets: 4, staff: 20 }, features: { ecommerce: true, pos: true, inventory: true } },
-  { id: 'pl_3', name: 'Enterprise', price: 1299, limits: { outlets: 999, staff: 999 }, features: { ecommerce: true, pos: true, inventory: true } }
+  {
+    id: 'basic',
+    name: 'Basic',
+    price: { monthly: 49, yearly: 470 },
+    limits: { outlets: 1, staff: 5 },
+    features: ['1 Outlet', '5 Staff Members', 'Standard POS', 'Email Support'],
+    color: 'slate',
+    hardware: [
+      { name: 'Nexus Mobile POS Terminal', desc: 'Handheld Android-based POS', icon: 'Smartphone' },
+      { name: 'Integrated Thermal Printer', desc: '58mm receipt printing', icon: 'Printer' }
+    ]
+  },
+  {
+    id: 'pro',
+    name: 'Pro',
+    price: { monthly: 149, yearly: 1430 },
+    limits: { outlets: 5, staff: 20 },
+    features: ['Up to 5 Outlets', '20 Staff Members', 'AI Onboarding', 'Analytics Pro', 'Ecommerce Integration'],
+    color: 'indigo',
+    recommended: true,
+    hardware: [
+      { name: 'Nexus Desktop 15" Terminal', desc: 'Sleek touch-screen interface', icon: 'Monitor' },
+      { name: 'Thermal Receipt Printer', desc: 'High-speed 80mm printing', icon: 'Printer' },
+      { name: 'Wireless Barcode Scanner', desc: '1D/2D laser scanning', icon: 'Scan' },
+      { name: 'Steel Cash Drawer', desc: 'Heavy-duty 5-compartment', icon: 'Coins' }
+    ]
+  },
+  {
+    id: 'enterprise',
+    name: 'Enterprise',
+    price: { monthly: 499, yearly: 4790 },
+    limits: { outlets: 999, staff: 999 },
+    features: ['Unlimited Outlets', 'Unlimited Staff', 'Custom Module Dev', 'Dedicated Manager', 'API Access'],
+    color: 'emerald',
+    hardware: [
+      { name: '2x Nexus Ultra Terminals', desc: 'Dual-screen POS stations', icon: 'Monitor' },
+      { name: 'Kitchen Display System', desc: '10" Tablet with wall mount', icon: 'Tablet' },
+      { name: 'Label & Receipt Printers', desc: 'Combo printing solution', icon: 'Printer' },
+      { name: 'Customer Display', desc: '7" Pole-mounted screen', icon: 'Tv' },
+      { name: 'Enterprise Network Hub', desc: 'Dedicated offline-sync router', icon: 'Network' }
+    ]
+  }
 ];
 
 const INITIAL_TENANTS = [
@@ -69,7 +108,7 @@ export function SaaSProvider({ children }) {
   });
 
   const [plans, setPlans] = useState(() => {
-    const saved = localStorage.getItem('nexus_plans');
+    const saved = localStorage.getItem('nexus_plans_v3');
     return saved ? JSON.parse(saved) : INITIAL_PLANS;
   });
 
@@ -86,7 +125,7 @@ export function SaaSProvider({ children }) {
   }, [sales]);
 
   useEffect(() => {
-    localStorage.setItem('nexus_plans', JSON.stringify(plans));
+    localStorage.setItem('nexus_plans_v3', JSON.stringify(plans));
   }, [plans]);
 
   // Actions

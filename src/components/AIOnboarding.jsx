@@ -9,6 +9,7 @@ import {
   AlertCircle, ArrowRight, Trash2, Plus,
   FileSpreadsheet, FileImage, File, Camera, Image as ImageIcon
 } from 'lucide-react';
+import CameraCapture from './CameraCapture';
 
 // ─── Mock data for text/URL input ──────────────────────────────────────────
 const mockProductData = {
@@ -57,45 +58,45 @@ function parseExcelInBrowser(arrayBuffer, fileName) {
 
   rows.forEach((row) => {
     const keys = Object.keys(row);
-    const nameField    = keys.find(k => /name|item|product|desc|article/i.test(k));
-    const priceField   = keys.find(k => /price|rate|amt|cost|unit/i.test(k));
-    const qtyField     = keys.find(k => /qty|quantity|count|pieces|pcs|stock/i.test(k));
-    const categoryField= keys.find(k => /category|group|type|dept/i.test(k));
-    const skuField     = keys.find(k => /sku|code|barcode|id|part|ref/i.test(k));
+    const nameField = keys.find(k => /name|item|product|desc|article/i.test(k));
+    const priceField = keys.find(k => /price|rate|amt|cost|unit/i.test(k));
+    const qtyField = keys.find(k => /qty|quantity|count|pieces|pcs|stock/i.test(k));
+    const categoryField = keys.find(k => /category|group|type|dept/i.test(k));
+    const skuField = keys.find(k => /sku|code|barcode|id|part|ref/i.test(k));
 
-    let name     = nameField     ? row[nameField]     : null;
-    let price    = priceField    ? row[priceField]    : null;
-    let qty      = qtyField      ? row[qtyField]      : 1;
+    let name = nameField ? row[nameField] : null;
+    let price = priceField ? row[priceField] : null;
+    let qty = qtyField ? row[qtyField] : 1;
     let category = categoryField ? row[categoryField] : null;
-    let sku      = skuField      ? row[skuField]      : null;
+    let sku = skuField ? row[skuField] : null;
 
     // Positional fallback
     if (!name || (price == null)) {
       const vals = Object.values(row).filter(v => v !== '');
-      name  = name  || vals.find(v => typeof v === 'string' && v.length > 2);
+      name = name || vals.find(v => typeof v === 'string' && v.length > 2);
       price = price ?? vals.find(v => (typeof v === 'number' || !isNaN(parseFloat(v))) && Number(v) > 0);
-      qty   = qty   || 1;
+      qty = qty || 1;
     }
 
     const cleanName = name ? name.toString().trim() : '';
-    const priceNum  = getPrice(price);
+    const priceNum = getPrice(price);
 
     if (cleanName.length > 1 && priceNum != null &&
-        !/total|invoice|page|tax|sub|date/i.test(cleanName)) {
+      !/total|invoice|page|tax|sub|date/i.test(cleanName)) {
       items.push({
         id: idCounter++,
-        sku:      sku ? sku.toString() : `SKU-${Math.floor(Math.random() * 9000) + 1000}`,
-        name:     cleanName,
+        sku: sku ? sku.toString() : `SKU-${Math.floor(Math.random() * 9000) + 1000}`,
+        name: cleanName,
         category: category ? category.toString() : guessCategory(cleanName),
-        price:    priceNum.toFixed(2),
-        qty:      qty ? qty.toString() : '1',
+        price: priceNum.toFixed(2),
+        qty: qty ? qty.toString() : '1',
       });
     }
   });
 
   const metadata = {
-    vendor:    `Extracted from ${fileName}`,
-    date:      new Date().toLocaleDateString(),
+    vendor: `Extracted from ${fileName}`,
+    date: new Date().toLocaleDateString(),
     invoiceNo: `INV-${Date.now() % 100000}`,
   };
 
@@ -116,7 +117,7 @@ function parseTextInBrowser(text, fileName) {
     const numbers = line.match(/\d+[.,]\d{2}|\d+/g) || [];
     if (numbers.length >= 1) {
       const priceStr = numbers[numbers.length - 1];
-      const qtyStr   = numbers.length > 1 ? numbers[numbers.length - 2] : '1';
+      const qtyStr = numbers.length > 1 ? numbers[numbers.length - 2] : '1';
       let firstNumIdx = line.search(/\d/);
       let name = line.substring(0, firstNumIdx).trim();
       if (name.length < 3) {
@@ -124,12 +125,12 @@ function parseTextInBrowser(text, fileName) {
       }
       if (name.length > 2) {
         items.push({
-          id:       idCounter++,
-          sku:      `SKU-${Math.floor(Math.random() * 9000) + 1000}`,
-          name:     name.substring(0, 50),
+          id: idCounter++,
+          sku: `SKU-${Math.floor(Math.random() * 9000) + 1000}`,
+          name: name.substring(0, 50),
           category: guessCategory(name),
-          price:    parseFloat(priceStr.replace(',', '')).toFixed(2),
-          qty:      qtyStr,
+          price: parseFloat(priceStr.replace(',', '')).toFixed(2),
+          qty: qtyStr,
         });
       }
     }
@@ -138,8 +139,8 @@ function parseTextInBrowser(text, fileName) {
   return {
     items,
     metadata: {
-      vendor:    `Extracted from ${fileName}`,
-      date:      new Date().toLocaleDateString(),
+      vendor: `Extracted from ${fileName}`,
+      date: new Date().toLocaleDateString(),
       invoiceNo: `INV-${Date.now() % 100000}`,
     },
   };
@@ -147,22 +148,23 @@ function parseTextInBrowser(text, fileName) {
 
 // ═══════════════════════════════════════════════════════════════════════════
 export default function AIOnboarding({ onComplete }) {
-  const { user }       = useAuth();
+  const { user } = useAuth();
   const { addProduct } = useSaaS();
 
-  const [appState, setAppState]               = useState('input');
-  const [inputText, setInputText]             = useState('');
-  const fileInputRef                          = useRef(null);
-  const cameraInputRef                        = useRef(null);
-  const [activeAnalysisStep, setActiveStep]   = useState(0);
-  const [formData, setFormData]               = useState(mockProductData);
-  const [editedFields, setEditedFields]       = useState(new Set());
-  const [isBulkMode, setIsBulkMode]           = useState(false);
-  const [isManualMode, setIsManualMode]       = useState(false);
-  const [invoiceItems, setInvoiceItems]       = useState([]);
+  const [appState, setAppState] = useState('input');
+  const [inputText, setInputText] = useState('');
+  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const [activeAnalysisStep, setActiveStep] = useState(0);
+  const [formData, setFormData] = useState(mockProductData);
+  const [editedFields, setEditedFields] = useState(new Set());
+  const [isBulkMode, setIsBulkMode] = useState(false);
+  const [isManualMode, setIsManualMode] = useState(false);
+  const [invoiceItems, setInvoiceItems] = useState([]);
   const [invoiceMetadata, setInvoiceMetadata] = useState({});
-  const [uploadError, setUploadError]         = useState('');
+  const [uploadError, setUploadError] = useState('');
   const [uploadedFileName, setUploadedFileName] = useState('');
+  const [showCamera, setShowCamera] = useState(false);
 
   const analysisSteps = [
     'Reading file structure...',
@@ -182,34 +184,34 @@ export default function AIOnboarding({ onComplete }) {
 
     // ─── If image, handle single product logic ───
     if (['png', 'jpg', 'jpeg', 'webp'].includes(ext) || file.type.startsWith('image/')) {
-        setIsBulkMode(false);
-        setIsManualMode(false);
-        setAppState('analyzing');
-        setActiveStep(0);
-        
-        const reader = new FileReader();
-        reader.onload = (event) => {
-           setFormData({
-             ...mockProductData,
-             name: file.name.replace(`.${ext}`, '').replace(/[-_]/g, ' ') || 'AI Vision Extracted',
-             image: event.target.result
-           });
-           setEditedFields(new Set());
-           
-           let step = 0;
-           const stepTimer = setInterval(() => {
-             step++;
-             if (step < analysisSteps.length) {
-                setActiveStep(step);
-             } else {
-                clearInterval(stepTimer);
-                setAppState('result');
-             }
-           }, 800);
-        };
-        reader.readAsDataURL(file);
-        if (e.target) e.target.value = '';
-        return;
+      setIsBulkMode(false);
+      setIsManualMode(false);
+      setAppState('analyzing');
+      setActiveStep(0);
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setFormData({
+          ...mockProductData,
+          name: file.name.replace(`.${ext}`, '').replace(/[-_]/g, ' ') || 'AI Vision Extracted',
+          image: event.target.result
+        });
+        setEditedFields(new Set());
+
+        let step = 0;
+        const stepTimer = setInterval(() => {
+          step++;
+          if (step < analysisSteps.length) {
+            setActiveStep(step);
+          } else {
+            clearInterval(stepTimer);
+            setAppState('result');
+          }
+        }, 800);
+      };
+      reader.readAsDataURL(file);
+      if (e.target) e.target.value = '';
+      return;
     }
 
     setIsBulkMode(true);
@@ -290,6 +292,33 @@ export default function AIOnboarding({ onComplete }) {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const handleCameraCapture = (imageSrc) => {
+    setShowCamera(false);
+    setIsBulkMode(false);
+    setIsManualMode(false);
+    setAppState('analyzing');
+    setActiveStep(0);
+    setUploadedFileName('camera_capture.jpg');
+
+    setFormData({
+      ...mockProductData,
+      name: 'AI Vision Extracted',
+      image: imageSrc
+    });
+    setEditedFields(new Set());
+
+    let step = 0;
+    const stepTimer = setInterval(() => {
+      step++;
+      if (step < analysisSteps.length) {
+        setActiveStep(step);
+      } else {
+        clearInterval(stepTimer);
+        setAppState('result');
+      }
+    }, 800);
+  };
+
   // ── Text/URL input (single product, uses mock) ────────────────────────
   const handleTextGenerate = (overrideText) => {
     const textToUse = typeof overrideText === 'string' ? overrideText : inputText;
@@ -297,7 +326,7 @@ export default function AIOnboarding({ onComplete }) {
     const priceMatch = textToUse.match(/(\d+)/);
     setFormData({
       ...mockProductData,
-      name:  textToUse.split(' ').slice(0, 5).join(' ') || mockProductData.name,
+      name: textToUse.split(' ').slice(0, 5).join(' ') || mockProductData.name,
       price: priceMatch ? priceMatch[0] + '.00' : '49.00',
     });
     setEditedFields(new Set());
@@ -345,23 +374,23 @@ export default function AIOnboarding({ onComplete }) {
       invoiceItems.forEach(item => {
         addProduct({
           tenantId: user?.tenantId || 't1',
-          name:     item.name,
-          sku:      item.sku,
+          name: item.name,
+          sku: item.sku,
           category: item.category,
-          price:    parseFloat(item.price) || 0,
-          stock:    { [user?.outletId || 'o1']: parseInt(item.qty) || 1 },
-          image:    'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400',
+          price: parseFloat(item.price) || 0,
+          stock: { [user?.outletId || 'o1']: parseInt(item.qty) || 1 },
+          image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400',
         });
       });
     } else {
       addProduct({
         tenantId: user?.tenantId || 't1',
-        name:     formData.name,
-        sku:      formData.sku || `SKU-${Math.floor(Math.random() * 9000) + 1000}`,
+        name: formData.name,
+        sku: formData.sku || `SKU-${Math.floor(Math.random() * 9000) + 1000}`,
         category: formData.category,
-        price:    parseFloat(formData.price),
-        stock:    { [user?.outletId || 'o1']: 10 },
-        image:    formData.image,
+        price: parseFloat(formData.price),
+        stock: { [user?.outletId || 'o1']: 10 },
+        image: formData.image,
       });
     }
     if (onComplete) onComplete();
@@ -372,23 +401,23 @@ export default function AIOnboarding({ onComplete }) {
     setEditedFields(prev => new Set(prev).add(field));
   };
 
-  const handleBulkEdit   = (id, field, value) =>
+  const handleBulkEdit = (id, field, value) =>
     setInvoiceItems(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
   const handleBulkDelete = (id) =>
     setInvoiceItems(prev => prev.filter(i => i.id !== id));
-  const handleBulkAdd    = () =>
+  const handleBulkAdd = () =>
     setInvoiceItems(prev => [...prev, {
       id: Date.now(), sku: `SKU-${Date.now() % 10000}`,
       name: '', category: 'General', price: '0.00', qty: '1',
     }]);
 
   const totalValue = invoiceItems.reduce((a, i) => a + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 0), 0);
-  const totalQty   = invoiceItems.reduce((a, i) => a + (parseInt(i.qty) || 0), 0);
+  const totalQty = invoiceItems.reduce((a, i) => a + (parseInt(i.qty) || 0), 0);
 
   const getFileIcon = (name = '') => {
     const ext = name.split('.').pop().toLowerCase();
-    if (['xlsx','xls','csv'].includes(ext)) return FileSpreadsheet;
-    if (['png','jpg','jpeg','webp'].includes(ext)) return FileImage;
+    if (['xlsx', 'xls', 'csv'].includes(ext)) return FileSpreadsheet;
+    if (['png', 'jpg', 'jpeg', 'webp'].includes(ext)) return FileImage;
     return FileText;
   };
   const FileIcon = getFileIcon(uploadedFileName);
@@ -431,7 +460,7 @@ export default function AIOnboarding({ onComplete }) {
                 <Sparkles className="w-4 h-4" /> Nexus AI Agent
               </div>
               <h1 className="text-5xl font-black text-slate-900 mb-6 tracking-tight leading-[1.1]">
-                Add <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">Anything</span>.<br/>We'll Build the Product.
+                Add <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">Anything</span>.<br />We'll Build the Product.
               </h1>
               <p className="text-lg text-slate-500 max-w-2xl mx-auto font-medium">
                 Upload an Excel, CSV, or text invoice — products are extracted instantly, right in your browser. No server needed.
@@ -448,8 +477,7 @@ export default function AIOnboarding({ onComplete }) {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
               {/* Hidden inputs */}
               <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls,.csv,.txt,.pdf,image/*" onChange={handleFileUpload} />
-              <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} />
-              
+
               <InputCard
                 icon={FileSpreadsheet}
                 title="Upload File"
@@ -461,7 +489,7 @@ export default function AIOnboarding({ onComplete }) {
                 icon={Camera}
                 title="Take Photo"
                 description="Use your camera"
-                onClick={() => cameraInputRef.current?.click()}
+                onClick={() => setShowCamera(true)}
               />
               <motion.div
                 whileHover={{ y: -4, scale: 1.02 }}
@@ -584,9 +612,9 @@ export default function AIOnboarding({ onComplete }) {
                 {/* Metadata */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {[
-                    { label: 'Source',     value: invoiceMetadata.vendor },
+                    { label: 'Source', value: invoiceMetadata.vendor },
                     { label: 'Invoice No', value: invoiceMetadata.invoiceNo },
-                    { label: 'Date',       value: invoiceMetadata.date },
+                    { label: 'Date', value: invoiceMetadata.date },
                   ].map(m => (
                     <div key={m.label} className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
                       <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1">{m.label}</p>
@@ -608,7 +636,7 @@ export default function AIOnboarding({ onComplete }) {
                     <table className="w-full text-left">
                       <thead>
                         <tr className="bg-slate-50/80">
-                          {['#','SKU','Product Name','Category','Price','Qty','Line Total',''].map(h => (
+                          {['#', 'SKU', 'Product Name', 'Category', 'Price', 'Qty', 'Line Total', ''].map(h => (
                             <th key={h} className="py-4 px-5 text-[10px] font-black uppercase text-slate-400 tracking-wider">{h}</th>
                           ))}
                         </tr>
@@ -685,7 +713,7 @@ export default function AIOnboarding({ onComplete }) {
                   </div>
                   <div className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-sm">
                     <div className="flex gap-8 mb-8">
-                      <div 
+                      <div
                         className="w-32 h-32 rounded-3xl overflow-hidden border border-slate-100 flex-shrink-0 relative group cursor-pointer bg-slate-50 flex flex-col items-center justify-center"
                         onClick={() => document.getElementById('manual-image-upload')?.click()}
                       >
@@ -702,11 +730,11 @@ export default function AIOnboarding({ onComplete }) {
                             <span className="text-[9px] font-black uppercase tracking-wider">Add Image</span>
                           </div>
                         )}
-                        <input 
-                          id="manual-image-upload" 
-                          type="file" 
-                          accept="image/*" 
-                          className="hidden" 
+                        <input
+                          id="manual-image-upload"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) {
@@ -754,6 +782,13 @@ export default function AIOnboarding({ onComplete }) {
               </div>
             )}
           </motion.div>
+        )}
+        {/* ───────── CAMERA CAPTURE ───────── */}
+        {showCamera && (
+          <CameraCapture
+            onCapture={handleCameraCapture}
+            onClose={() => setShowCamera(false)}
+          />
         )}
       </AnimatePresence>
     </div>
