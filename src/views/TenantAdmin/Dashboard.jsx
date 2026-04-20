@@ -10,7 +10,8 @@ import { motion } from 'framer-motion';
 
 // Mock per-outlet sales data generator (seeded by outlet id so it's stable)
 function mockOutletSales(outletId) {
-  const seed = outletId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const idStr = String(outletId);
+  const seed = idStr.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   const sales = ((seed * 137) % 2800) + 600;
   const orders = Math.round(sales / 58);
   return { sales, orders };

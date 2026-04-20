@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth, ROLES } from '../context/AuthContext';
+import { useSaaS } from '../context/SaaSContext';
 import { useNavigate } from 'react-router-dom';
 import { 
   Sparkles, Box, Mail, Lock, ShieldCheck, 
@@ -16,7 +17,8 @@ export default function Login() {
   
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, loginAs } = useAuth();
+  const { tenants } = useSaaS();
   const navigate = useNavigate();
 
   const handleAuthNavigation = (role) => {
@@ -30,26 +32,38 @@ export default function Login() {
     e.preventDefault();
     setError('');
     
-    // Simulate New Tenant forced password change
-    if (!isChangingPassword && (password.startsWith('NEX-') || password === 'temp123')) {
+    // Simulate New Tenant forced password change (matched prefix with TenantOnboarding.jsx)
+    if (!isChangingPassword && (password.startsWith('NX-') || password === 'temp123')) {
       setIsChangingPassword(true);
       return;
     }
 
     if (isChangingPassword) {
-      if (newPassword.length < 8) {
-        setError('New password must be at least 8 characters.');
+      if (newPassword.length < 6) {
+        setError('New password must be at least 6 characters.');
         return;
       }
       setLoading(true);
       setTimeout(() => {
         setIsChangingPassword(false);
         setLoading(false);
-        // Fallback to mocking login
-        const result = login(email, 'password'); // use valid mock password
+        // Try built-in accounts first; fall back to dynamic tenant
+        const result = login(email, 'password');
         if (result.success) {
-          const user = JSON.parse(localStorage.getItem('nexus_user'));
-          handleAuthNavigation(user.role);
+          const savedUser = JSON.parse(localStorage.getItem('nexus_user'));
+          handleAuthNavigation(savedUser.role);
+        } else {
+          // Dynamic tenant — find the actual tenant by owner email
+          const tenant = tenants.find(t => t.ownerEmail === email || t.adminCredentials?.username === email);
+          const dynamicUser = {
+            id: `ta_${Date.now()}`,
+            name: tenant ? tenant.ownerName : email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+            email,
+            role: ROLES.TENANT_ADMIN,
+            tenantId: tenant ? tenant.id : 't1'
+          };
+          loginAs(dynamicUser);
+          handleAuthNavigation(ROLES.TENANT_ADMIN);
         }
       }, 1000);
       return;
@@ -66,15 +80,22 @@ export default function Login() {
       }
 
       const result = isDynamic ? { success: true } : login(email, password);
-      
+
       if (result.success && isDynamic) {
-        // mock dynamic TA login
-        const dynamicUser = { id: 'ta99', name: 'Nexus Fashion Owner', email, role: ROLES.TENANT_ADMIN, tenantId: 't1' };
-        localStorage.setItem('nexus_user', JSON.stringify(dynamicUser));
+        // Dynamic tenant — find the actual tenant by owner email
+        const tenant = tenants.find(t => t.ownerEmail === email || t.adminCredentials?.username === email);
+        const dynamicUser = {
+          id: `ta_${Date.now()}`,
+          name: tenant ? tenant.ownerName : email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          email,
+          role: ROLES.TENANT_ADMIN,
+          tenantId: tenant ? tenant.id : 't1'
+        };
+        loginAs(dynamicUser);
         handleAuthNavigation(ROLES.TENANT_ADMIN);
       } else if (result.success) {
-        const user = JSON.parse(localStorage.getItem('nexus_user'));
-        handleAuthNavigation(user.role);
+        const savedUser = JSON.parse(localStorage.getItem('nexus_user'));
+        handleAuthNavigation(savedUser.role);
       } else {
         setError(result.message);
         setLoading(false);
@@ -165,11 +186,11 @@ export default function Login() {
                    <div className="relative">
                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                      <input 
-                       type="email" 
+                       type="text" 
                        value={email}
                        onChange={(e) => setEmail(e.target.value)}
                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:bg-white focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800"
-                       placeholder="name@company.com"
+                       placeholder="Enter email or username"
                        required
                      />
                    </div>

@@ -20,7 +20,8 @@ function generateMockTransactions(outlets) {
   outlets.forEach((outlet, oi) => {
     const ordersForOutlet = 2 + (oi % 2); // 2–3 per outlet
     for (let i = 0; i < ordersForOutlet; i++) {
-      const seed = (outlet.id.charCodeAt(0) + i * 37) % 1000;
+      const idStr = String(outlet.id);
+      const seed = (idStr.charCodeAt(0) + i * 37) % 1000;
       const amount = ((seed * 131) % 19000 + 1000) / 100;
       transactions.push({
         id: `ORD-${counter--}`,
@@ -41,7 +42,8 @@ function generateMockTransactions(outlets) {
 }
 
 function seedOutletRegisters(outletId) {
-  const seed = outletId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const idStr = String(outletId);
+  const seed = idStr.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   const active = (seed % 4) + 1;
   const total = active + (seed % 3) + 1;
   return { active, total };

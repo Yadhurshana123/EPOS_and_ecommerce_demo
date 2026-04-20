@@ -23,13 +23,15 @@ const MOCK_DAILY_SALES = [
 
 // Stable mock sales value per outlet (seeded by outlet id)
 function mockOutletRevenue(outletId) {
-  const seed = outletId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const idStr = String(outletId);
+  const seed = idStr.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   return ((seed * 211) % 30000) + 8000;
 }
 
 // Stable mock per-category (seeded by category string)
 function mockCategoryRevenue(category) {
-  const seed = category.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const catStr = String(category);
+  const seed = catStr.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   return ((seed * 179) % 20000) + 3000;
 }
 

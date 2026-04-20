@@ -65,6 +65,15 @@ const INITIAL_TENANTS = [
       { id: 'o1', name: 'Downtown Branch', location: 'New York' },
       { id: 'o2', name: 'Westside Mall', location: 'New York' },
     ],
+    receiptSettings: {
+      header: 'Welcome to Nexus Fashion',
+      footer: 'Thank you for shopping with us!',
+      showLogo: true,
+      showAddress: true,
+      showPhone: true,
+      fontFamily: 'sans-serif',
+      fontSize: 'sm'
+    }
   },
   {
     id: 't2',
@@ -82,6 +91,15 @@ const INITIAL_TENANTS = [
     outlets: [
       { id: 'o3', name: 'Tech Hub SV', location: 'Silicon Valley' },
     ],
+    receiptSettings: {
+      header: 'Tech Gadgets - Premium Electronics',
+      footer: 'Warranty valid for 1 year from purchase.',
+      showLogo: true,
+      showAddress: true,
+      showPhone: true,
+      fontFamily: 'mono',
+      fontSize: 'md'
+    }
   }
 ];
 

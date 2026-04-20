@@ -103,34 +103,135 @@ function parseExcelInBrowser(arrayBuffer, fileName) {
   return { items, metadata };
 }
 
+// ─── In-browser PDF extraction using pdf.js ──────────────────────────────
+async function extractTextFromPDF(file) {
+  const pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.mjs');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.mjs';
+
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullLines = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    
+    // Group items by their Y-coordinate (within a small threshold)
+    const items = content.items.map(item => ({
+      str: item.str,
+      x: item.transform[4],
+      y: item.transform[5]
+    }));
+
+    // Sort by Y descending (top to bottom)
+    items.sort((a, b) => b.y - a.y);
+
+    let currentY = items[0]?.y;
+    let currentLine = [];
+    const threshold = 5; // Pixels of vertical difference to consider same line
+
+    items.forEach(item => {
+      if (Math.abs(item.y - currentY) > threshold) {
+        // New line detected
+        currentLine.sort((a, b) => a.x - b.x); // Sort words on line by X
+        fullLines.push(currentLine.map(it => it.str).join(' '));
+        currentLine = [item];
+        currentY = item.y;
+      } else {
+        currentLine.push(item);
+      }
+    });
+    // Add last line
+    if (currentLine.length > 0) {
+      currentLine.sort((a, b) => a.x - b.x);
+      fullLines.push(currentLine.map(it => it.str).join(' '));
+    }
+  }
+  return fullLines.join('\n');
+}
+
 // ─── In-browser plain text / PDF-text parser ────────────────────────────────
 function parseTextInBrowser(text, fileName) {
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 5);
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 3);
   let idCounter = 1;
   const items = [];
 
   lines.forEach(line => {
-    if (/tax|total|invoice|date|billing|shipping|customer|order|balance|payment/i.test(line)) return;
-    const words = line.split(/\s+/);
-    if (words.length < 2) return;
+    // 1. Skip non-product lines
+    if (/tax|total|invoice|date|billing|shipping|customer|order|balance|payment|page|vendor|summary|subtotal|receipt|tel|phone|website/i.test(line)) return;
+    if (/^[0-9\s,.-]+$/.test(line)) return; // Skip numeric-only lines
+    
+    // 2. Filter out date-like strings to avoid misidening them as qty
+    const cleanLine = line.replace(/\d{1,4}[-/]\d{1,2}[-/]\d{1,4}/g, ' ') // DD-MM-YYYY or YYYY-MM-DD
+                         .replace(/\d{1,2}:\d{2}(:\d{2})?\s*([AP]M)?/gi, ' ') // Time
+                         .replace(/[$€£¥]/g, ''); // Remove currency symbols for better matching
 
-    const numbers = line.match(/\d+[.,]\d{2}|\d+/g) || [];
+    // 3. Find all numbers that look like price or qty
+    const numbers = cleanLine.match(/\d{1,3}(?:,\d{3})*(?:\.\d{2})|\d+\.\d{2}|\d+/g) || [];
+    
     if (numbers.length >= 1) {
-      const priceStr = numbers[numbers.length - 1];
-      const qtyStr = numbers.length > 1 ? numbers[numbers.length - 2] : '1';
-      let firstNumIdx = line.search(/\d/);
-      let name = line.substring(0, firstNumIdx).trim();
-      if (name.length < 3) {
-        name = line.replace(priceStr, '').replace(qtyStr, '').replace(/[^a-zA-Z\s]/g, '').trim();
+      let price = 0;
+      let qty = 1;
+      let name = "";
+
+      const cleanNums = numbers.map(n => parseFloat(n.replace(/,/g, '')));
+      
+      // Determine Price and Qty
+      if (cleanNums.length >= 3) {
+        // Pattern: Qty UnitPrice Total (e.g. "2 50.00 100.00")
+        const [n1, n2, n3] = [cleanNums[cleanNums.length-3], cleanNums[cleanNums.length-2], cleanNums[cleanNums.length-1]];
+        if (Math.abs(n1 * n2 - n3) < 0.2) {
+          qty = n1;
+          price = n2;
+        } else {
+          // Fallback: take the largest as total, second to last as unit
+          price = n2;
+          qty = n1;
+        }
+      } else if (cleanNums.length === 2) {
+        // Pattern: Qty Price or Price Qty
+        const [n1, n2] = [cleanNums[0], cleanNums[1]];
+        // Usually price has decimals or is larger, while qty is often an integer
+        const s1 = numbers[0], s2 = numbers[1];
+        if ((s2.includes('.') && !s1.includes('.')) || n2 > 200 || n2 > n1 * 5) {
+          qty = n1;
+          price = n2;
+        } else {
+          qty = n2;
+          price = n1;
+        }
+      } else {
+        price = cleanNums[0];
+        qty = 1;
       }
+
+      // Skip if price is suspiciously high or zero (likely a reference number)
+      if (price <= 0 || price > 50000) return;
+
+      // 4. Extract Name
+      // Try to find text before the first number
+      let firstNumIdx = line.search(/\d/);
+      name = line.substring(0, firstNumIdx > 0 ? firstNumIdx : line.length).trim();
+
+      // If name is too short, try removing all recognized numbers from the line
+      if (name.length < 3) {
+        name = line;
+        numbers.forEach(num => {
+          // Replace only whole words to be safe
+          const regex = new RegExp(`\\b${num.replace('.', '\\.')}\\b`, 'g');
+          name = name.replace(regex, '');
+        });
+        name = name.replace(/[$€£¥]/g, '').replace(/[^a-zA-Z0-9\s-]/g, '').trim();
+      }
+
       if (name.length > 2) {
         items.push({
           id: idCounter++,
           sku: `SKU-${Math.floor(Math.random() * 9000) + 1000}`,
-          name: name.substring(0, 50),
+          name: name.substring(0, 60),
           category: guessCategory(name),
-          price: parseFloat(priceStr.replace(',', '')).toFixed(2),
-          qty: qtyStr,
+          price: price.toFixed(2),
+          qty: Math.max(1, Math.round(qty)).toString(),
         });
       }
     }
@@ -139,9 +240,9 @@ function parseTextInBrowser(text, fileName) {
   return {
     items,
     metadata: {
-      vendor: `Extracted from ${fileName}`,
+      vendor: text.match(/from:?\s*([a-z0-9\s-]+)/i)?.[1]?.trim() || `Extracted from ${fileName}`,
       date: new Date().toLocaleDateString(),
-      invoiceNo: `INV-${Date.now() % 100000}`,
+      invoiceNo: text.match(/invoice\s*#?\s*:?\s*([a-z0-9-]+)/i)?.[1] || `INV-${Date.now() % 100000}`,
     },
   };
 }
@@ -238,33 +339,29 @@ export default function AIOnboarding({ onComplete }) {
         const text = await file.text();
         result = parseTextInBrowser(text, file.name);
       } else if (ext === 'pdf') {
-        // Try backend; if unavailable, show friendly error
-        clearInterval(stepTimer);
-
-        const formPayload = new FormData();
-        formPayload.append('invoice', file);
-
         try {
+          const text = await extractTextFromPDF(file);
+          result = parseTextInBrowser(text, file.name);
+        } catch (pdfErr) {
+          console.error('In-browser PDF fail, falling back to server:', pdfErr);
+          // Fallback to backend if browser-side fails
+          const formPayload = new FormData();
+          formPayload.append('invoice', file);
+
           const resp = await fetch('http://localhost:3000/api/extract-invoice', {
             method: 'POST',
             body: formPayload,
           });
           if (!resp.ok) throw new Error(`Server ${resp.status}`);
           const data = await resp.json();
-          if (data.success && data.items?.length > 0) {
+          if (data.success) {
             result = { items: data.items, metadata: data.metadata };
           } else {
             throw new Error('No items extracted');
           }
-        } catch {
-          setUploadError('PDF extraction requires the backend server. Run: npm run server  — then try again. Or upload an Excel/CSV instead.');
-          setAppState('input');
-          setIsBulkMode(false);
-          if (fileInputRef.current) fileInputRef.current.value = '';
-          return;
         }
       } else {
-        throw new Error(`Unsupported file type: .${ext}. Use Excel, CSV, or TXT.`);
+        throw new Error(`Unsupported file type: .${ext}. Use Excel, CSV, or PDF.`);
       }
 
       clearInterval(stepTimer);
@@ -546,7 +643,7 @@ export default function AIOnboarding({ onComplete }) {
 
             {/* Supported formats hint */}
             <p className="text-center text-xs text-slate-400 font-medium mt-6">
-              Supported: <span className="font-bold">.xlsx  ·  .xls  ·  .csv  ·  .txt</span> &nbsp;|&nbsp; PDF requires backend server
+              Supported: <span className="font-bold">.xlsx  ·  .xls  ·  .csv  ·  .pdf</span> &nbsp;|&nbsp; AI-powered extraction
             </p>
           </motion.div>
         )}

@@ -44,13 +44,20 @@ export function AuthProvider({ children }) {
     return { success: false, message: 'Invalid credentials' };
   };
 
+  // Directly set a user object — used for dynamic/tenant logins that aren't in the mock list
+  const loginAs = (userObj) => {
+    setUser(userObj);
+    localStorage.setItem('nexus_user', JSON.stringify(userObj));
+    return { success: true };
+  };
+
   const logout = () => {
     setUser(null);
     localStorage.removeItem('nexus_user');
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, loginAs, logout, loading }}>
       {!loading && children}
     </AuthContext.Provider>
   );

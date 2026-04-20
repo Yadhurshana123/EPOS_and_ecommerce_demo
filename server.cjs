@@ -100,56 +100,89 @@ app.post('/api/extract-invoice', upload.single('invoice'), async (req, res) => {
     else {
         let extractedText = "";
         if (ext === '.pdf') {
-           const dataBuffer = fs.readFileSync(file.path);
-           const pdfData = await pdfParse(dataBuffer);
-           extractedText = pdfData.text;
+            const dataBuffer = fs.readFileSync(file.path);
+            const pdfData = await pdfParse(dataBuffer);
+            extractedText = pdfData.text;
         } else {
-           extractedText = fs.readFileSync(file.path, 'utf8');
+            extractedText = fs.readFileSync(file.path, 'utf8');
         }
 
         // Split into lines and clean
-        const rawLines = extractedText.split('\n').map(l => l.trim()).filter(l => l.length > 5);
+        const rawLines = extractedText.split('\n')
+            .map(l => l.trim())
+            .filter(l => l.length > 3);
         
         console.log(`Analyzing ${rawLines.length} lines from text...`);
 
         rawLines.forEach(line => {
-           // Heuristic: A product line usually has text followed by some numbers (Price/Qty)
-           // Or formatted as columns separated by multiple spaces
-           
-           // Skip obviously non-item lines
-           if (/tax|total|invoice|date|billing|shipping|customer|order|balance|payment/i.test(line)) return;
+            // Skip headers, footers, and common totals
+            if (/tax|total|invoice|date|billing|shipping|customer|order|balance|payment|page|vendor|summary|subtotal|receipt|tel|phone|website/i.test(line)) return;
+            if (/^[0-9\s,.-]+$/.test(line)) return; // Skip lines with only numbers/symbols
 
-           const words = line.split(/\s+/);
-           if (words.length < 2) return;
+            // Filter out date-like strings and currency symbols
+            const cleanLine = line.replace(/\d{1,4}[-/]\d{1,2}[-/]\d{1,4}/g, ' ')
+                                 .replace(/\d{1,2}:\d{2}(:\d{2})?\s*([AP]M)?/gi, ' ')
+                                 .replace(/[$€£¥]/g, '');
 
-           // Find all numbers in the line
-           const numbers = line.match(/\d+[.,]\d{2}|\d+/g) || [];
-           
-           if (numbers.length >= 1) {
-              // The largest number is often the total price, the one before it is often unit price
-              // But most simply, we take the last two numbers as Price and Qty
-              let priceStr = numbers[numbers.length - 1];
-              let qtyStr = numbers.length > 1 ? numbers[numbers.length - 2] : "1";
+            // Find all numbers that could be price or qty
+            const numbers = cleanLine.match(/\d{1,3}(?:,\d{3})*(?:\.\d{2})|\d+\.\d{2}|\d+/g) || [];
+            
+            if (numbers.length >= 1) {
+                let price = 0;
+                let qty = 1;
+                let name = "";
 
-              // Clean name: everything before the first number
-              let firstNumIndex = line.search(/\d/);
-              let name = line.substring(0, firstNumIndex).trim();
+                const cleanNums = numbers.map(n => parseFloat(n.replace(/,/g, '')));
+                
+                if (cleanNums.length >= 3) {
+                    const [n1, n2, n3] = [cleanNums[cleanNums.length-3], cleanNums[cleanNums.length-2], cleanNums[cleanNums.length-1]];
+                    if (Math.abs(n1 * n2 - n3) < 0.2) {
+                        qty = n1;
+                        price = n2;
+                    } else {
+                        price = n2;
+                        qty = n1;
+                    }
+                } else if (cleanNums.length === 2) {
+                    const [n1, n2] = [cleanNums[0], cleanNums[1]];
+                    const s1 = numbers[0], s2 = numbers[1];
+                    if ((s2.includes('.') && !s1.includes('.')) || n2 > 200 || n2 > n1 * 5) {
+                        qty = n1;
+                        price = n2;
+                    } else {
+                        qty = n2;
+                        price = n1;
+                    }
+                } else {
+                    price = cleanNums[0];
+                    qty = 1;
+                }
 
-              if (name.length < 3) {
-                  // Fallback: name is just everything that isn't those two numbers
-                  name = line.replace(priceStr, '').replace(qtyStr, '').replace(/[^a-zA-Z\s]/g, '').trim();
-              }
+                if (price <= 0 || price > 50000) return;
 
-              if (name.length > 2) {
-                 items.push({
-                    id: idCounter++,
-                    name: name.substring(0, 50),
-                    category: guessCategory(name),
-                    price: parseFloat(priceStr.replace(',', '')).toFixed(2),
-                    qty: qtyStr
-                 });
-              }
-           }
+                let firstNumIndex = line.search(/\d/);
+                name = line.substring(0, firstNumIndex > 0 ? firstNumIndex : line.length).trim();
+
+                if (name.length < 3) {
+                    name = line;
+                    numbers.forEach(num => {
+                        const regex = new RegExp(`\\b${num.replace('.', '\\.')}\\b`, 'g');
+                        name = name.replace(regex, '');
+                    });
+                    name = name.replace(/[$€£¥]/g, '').replace(/[^a-zA-Z0-9\s-]/g, '').trim();
+                }
+
+                if (name.length > 2) {
+                    items.push({
+                        id: idCounter++,
+                        sku: `SKU-${Math.floor(Math.random() * 9000) + 1000}`,
+                        name: name.substring(0, 60),
+                        category: guessCategory(name),
+                        price: price.toFixed(2),
+                        qty: Math.max(1, Math.round(qty)).toString()
+                    });
+                }
+            }
         });
     }
 
